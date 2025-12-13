@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160" role="img" aria-label="Ice cream">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eff6ff"/>
+      <stop offset="1" stop-color="#dbeafe"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="240" height="160" rx="16" fill="url(#g)"/>
+  <path d="M120 32c22 0 40 18 40 40 0 20-14 36-33 39l-7 39-7-39c-19-3-33-19-33-39 0-22 18-40 40-40z" fill="#60a5fa"/>
+  <path d="M101 110l19 46 19-46z" fill="#f59e0b"/>
+  <text x="16" y="28" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="16" fill="#1d4ed8">Ice Cream</text>
+</svg>

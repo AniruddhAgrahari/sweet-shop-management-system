@@ -6,12 +6,15 @@ function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
     setLoading(true);
 
     try {
@@ -46,6 +49,52 @@ function Login() {
     }
   };
 
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const payload = {
+        username: username,
+        password: password,
+        role: "customer"
+      };
+
+      await axios.post(
+        'http://127.0.0.1:8000/auth/register',
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      setSuccessMessage('Registration successful! Please log in.');
+      setIsRegistering(false);
+      // Clear password field for security/convenience after registration
+      setPassword('');
+    } catch (err) {
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError('Registration failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleMode = () => {
+    setIsRegistering(!isRegistering);
+    setError('');
+    setSuccessMessage('');
+    setUsername('');
+    setPassword('');
+  };
+
   return (
     <div className="login-container">
       <div className="login-card">
@@ -55,8 +104,9 @@ function Login() {
           <p>Management System</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="login-form">
+        <form onSubmit={isRegistering ? handleRegister : handleLogin} className="login-form">
           {error && <div className="error-message">{error}</div>}
+          {successMessage && <div className="success-message" style={{color: 'green', marginBottom: '1rem', textAlign: 'center'}}>{successMessage}</div>}
 
           <div className="form-group">
             <label htmlFor="username">Username</label>
@@ -83,12 +133,28 @@ function Login() {
           </div>
 
           <button type="submit" className="login-button" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? (isRegistering ? 'Registering...' : 'Logging in...') : (isRegistering ? 'Register' : 'Login')}
           </button>
         </form>
 
         <div className="login-footer">
-          <p>Don't have an account? Contact admin</p>
+          <button 
+            onClick={toggleMode} 
+            className="toggle-button"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#007bff',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              fontSize: '0.9rem',
+              marginTop: '10px'
+            }}
+          >
+            {isRegistering 
+              ? "Already have an account? Login Here." 
+              : "Need an account? Register Here."}
+          </button>
         </div>
       </div>
     </div>

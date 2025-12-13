@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../dashboard.css';
@@ -14,6 +14,13 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [purchasingId, setPurchasingId] = useState(null);
+
+  // Quantity selector per sweet id
+  const [purchaseQtyById, setPurchaseQtyById] = useState({});
+
+  // Simple toast popup state
+  const [toastMessage, setToastMessage] = useState('');
+  const toastTimerRef = useRef(null);
   
   // Add Sweet Form State
   const [showAddForm, setShowAddForm] = useState(false);
@@ -25,9 +32,18 @@ function Dashboard() {
     quantity: '',
   });
 
-  // Search State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  // Filter State (Flipkart-style drawer)
+  const [queryName, setQueryName] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [priceMin, setPriceMin] = useState('');
+  const [priceMax, setPriceMax] = useState('');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({
+    category: true,
+    price: true,
+  });
+  const [categorySearch, setCategorySearch] = useState('');
+  const [categoryOptions, setCategoryOptions] = useState([]);
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('access_token');
@@ -36,15 +52,23 @@ function Dashboard() {
     };
   };
 
-  const fetchSweets = async (query = '') => {
+  const fetchSweets = async (override = null) => {
+    const state = override || {
+      queryName,
+      selectedCategories,
+      priceMin,
+      priceMax,
+    };
+
     try {
       setLoading(true);
-      let url = `${API_URL}/sweets/`;
-      
-      // Use search endpoint if there's a query
-      if (query.trim()) {
-        url = `${API_URL}/sweets/search?name=${encodeURIComponent(query.trim())}`;
-      }
+      const params = new URLSearchParams();
+      if (state.queryName?.trim()) params.append('name', state.queryName.trim());
+      if (state.selectedCategories?.length) params.append('category', state.selectedCategories.join(','));
+      if (state.priceMin !== '' && state.priceMin !== null && state.priceMin !== undefined) params.append('min_price', state.priceMin);
+      if (state.priceMax !== '' && state.priceMax !== null && state.priceMax !== undefined) params.append('max_price', state.priceMax);
+
+      const url = `${API_URL}/sweets/search?${params.toString()}`;
       
       const response = await axios.get(url, {
         headers: getAuthHeaders(),
@@ -59,18 +83,66 @@ function Dashboard() {
     }
   };
 
-  useEffect(() => {
-    fetchSweets(searchQuery);
-  }, [searchQuery]);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setSearchQuery(searchInput);
+  const fetchCategoryOptions = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/sweets/`, {
+        headers: getAuthHeaders(),
+      });
+      const all = Array.isArray(response.data) ? response.data : [];
+      const categories = Array.from(
+        new Set(
+          all
+            .map((s) => (s?.category ?? '').toString().trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
+      setCategoryOptions(categories);
+    } catch (err) {
+      // Non-fatal: filtering still works, user just won't see category suggestions
+      console.error('Error fetching categories:', err);
+    }
   };
 
-  const handleClearSearch = () => {
-    setSearchInput('');
-    setSearchQuery('');
+  useEffect(() => {
+    fetchCategoryOptions();
+    fetchSweets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const hasActiveFilters = Boolean(
+    queryName.trim() || selectedCategories.length || priceMin !== '' || priceMax !== ''
+  );
+  const activeFilterCount =
+    (queryName.trim() ? 1 : 0) +
+    (selectedCategories.length ? 1 : 0) +
+    (priceMin !== '' || priceMax !== '' ? 1 : 0);
+
+  const handleSearchSubmit = (e) => {
+    if (e?.preventDefault) e.preventDefault();
+    fetchSweets();
+  };
+
+  const handleClearAll = () => {
+    setQueryName('');
+    setSelectedCategories([]);
+    setPriceMin('');
+    setPriceMax('');
+    setCategorySearch('');
+    fetchSweets({ queryName: '', selectedCategories: [], priceMin: '', priceMax: '' });
+  };
+
+  const toggleCategory = (category) => {
+    setSelectedCategories((prev) => {
+      if (prev.includes(category)) return prev.filter((c) => c !== category);
+      return [...prev, category];
+    });
+  };
+
+  const toggleSection = (key) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   const handleLogout = () => {
@@ -78,23 +150,49 @@ function Dashboard() {
     navigate('/login');
   };
 
-  const handlePurchase = async (sweetId) => {
+  const getPurchaseQty = (sweet) => {
+    const raw = purchaseQtyById?.[sweet.id];
+    const parsed = Number.parseInt(raw, 10);
+    const safe = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    const max = Number(sweet.quantity || 0);
+    if (max <= 0) return 1;
+    return Math.min(safe, max);
+  };
+
+  const adjustQty = (sweet, delta) => {
+    const current = getPurchaseQty(sweet);
+    const max = Number(sweet.quantity || 0);
+    const next = Math.min(max, Math.max(1, current + delta));
+    setPurchaseQtyById((prev) => ({ ...prev, [sweet.id]: next }));
+  };
+
+  const handlePurchase = async (sweet, quantity) => {
     try {
-      setPurchasingId(sweetId);
+      setPurchasingId(sweet.id);
       const response = await axios.post(
-        `${API_URL}/sweets/${sweetId}/purchase`,
+        `${API_URL}/sweets/${sweet.id}/purchase?quantity=${encodeURIComponent(quantity)}`,
         {},
         { headers: getAuthHeaders() }
       );
       
       // Update the local state to reflect the purchase
       setSweets((prevSweets) =>
-        prevSweets.map((sweet) =>
-          sweet.id === sweetId
-            ? { ...sweet, quantity: response.data.remaining_stock }
-            : sweet
+        prevSweets.map((s) =>
+          s.id === sweet.id
+            ? { ...s, quantity: response.data.remaining_stock }
+            : s
         )
       );
+
+      // Reset qty back to 1 (or keep it capped) after successful purchase
+      setPurchaseQtyById((prev) => ({ ...prev, [sweet.id]: 1 }));
+
+      // Success popup
+      const purchasedQty = response.data?.purchased_qty ?? quantity;
+      const baseMsg = response.data?.message || 'Purchase successful';
+      setToastMessage(`${baseMsg}${purchasedQty ? ` (x${purchasedQty})` : ''}`);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setToastMessage(''), 2500);
     } catch (err) {
       if (err.response?.status === 400) {
         alert(err.response.data.detail || 'Out of stock!');
@@ -106,6 +204,12 @@ function Dashboard() {
       setPurchasingId(null);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -165,6 +269,11 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
+      {toastMessage && (
+        <div className="toast-container" aria-live="polite" aria-atomic="true">
+          <div className="toast toast-success">{toastMessage}</div>
+        </div>
+      )}
       {/* Navbar */}
       <nav className="navbar">
         <div className="navbar-brand">
@@ -184,13 +293,13 @@ function Dashboard() {
       {/* Main Content */}
       <main className="main-content">
         <div className="page-header">
-          <h2>Our Sweets Collection</h2>
-          <p>Browse and purchase your favorite treats!</p>
+          <h2>{isAdmin ? 'Admin Page' : 'Our Sweets Collection'}</h2>
+          {!isAdmin && <p>Browse and purchase your favorite treats!</p>}
         </div>
 
-        {/* Search Bar */}
+        {/* Search + Filters (Flipkart-style) */}
         <div className="search-container">
-          <form className="search-form" onSubmit={handleSearch}>
+          <form className="search-form" onSubmit={handleSearchSubmit}>
             <div className="search-input-wrapper">
               <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8"></circle>
@@ -200,11 +309,11 @@ function Dashboard() {
                 type="text"
                 className="search-input"
                 placeholder="Search sweets by name..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
+                value={queryName}
+                onChange={(e) => setQueryName(e.target.value)}
               />
-              {searchInput && (
-                <button type="button" className="clear-search-btn" onClick={handleClearSearch}>
+              {queryName && (
+                <button type="button" className="clear-search-btn" onClick={() => setQueryName('')}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -212,19 +321,114 @@ function Dashboard() {
                 </button>
               )}
             </div>
+
+            <button type="button" className="filter-open-btn" onClick={() => setIsFilterOpen(true)}>
+              Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+            </button>
+
             <button type="submit" className="search-btn">
               Search
             </button>
-          </form>
-          {searchQuery && (
-            <p className="search-results-info">
-              Showing results for: <strong>"{searchQuery}"</strong>
-              <button className="clear-results-btn" onClick={handleClearSearch}>
+
+            {hasActiveFilters && (
+              <button type="button" className="clear-results-btn" onClick={handleClearAll}>
                 Clear
               </button>
-            </p>
-          )}
+            )}
+          </form>
         </div>
+
+        {isFilterOpen && (
+          <div className="filter-overlay" role="dialog" aria-modal="true" onClick={() => setIsFilterOpen(false)}>
+            <aside className="filter-drawer" onClick={(e) => e.stopPropagation()}>
+              <div className="filter-header">
+                <h3>Filters</h3>
+                <button type="button" className="filter-close-btn" onClick={() => setIsFilterOpen(false)} aria-label="Close filters">
+                  ×
+                </button>
+              </div>
+
+              <div className="filter-body">
+                <button type="button" className="filter-section-title" onClick={() => toggleSection('category')}>
+                  <span>Category</span>
+                  <span className={`filter-caret ${expandedSections.category ? 'open' : ''}`}>▾</span>
+                </button>
+                {expandedSections.category && (
+                  <div className="filter-section-content">
+                    <input
+                      className="filter-section-search"
+                      type="text"
+                      placeholder="Search category"
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                    />
+                    <div className="filter-checkbox-list">
+                      {categoryOptions
+                        .filter((c) => c.toLowerCase().includes(categorySearch.trim().toLowerCase()))
+                        .map((category) => (
+                          <label key={category} className="filter-checkbox-item">
+                            <input
+                              type="checkbox"
+                              checked={selectedCategories.includes(category)}
+                              onChange={() => toggleCategory(category)}
+                            />
+                            <span>{category}</span>
+                          </label>
+                        ))}
+                      {categoryOptions.length === 0 && (
+                        <div className="filter-empty">No categories found</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button type="button" className="filter-section-title" onClick={() => toggleSection('price')}>
+                  <span>Price</span>
+                  <span className={`filter-caret ${expandedSections.price ? 'open' : ''}`}>▾</span>
+                </button>
+                {expandedSections.price && (
+                  <div className="filter-section-content">
+                    <div className="filter-price-row">
+                      <input
+                        className="filter-price-input"
+                        type="number"
+                        min="0"
+                        placeholder="Min"
+                        value={priceMin}
+                        onChange={(e) => setPriceMin(e.target.value)}
+                      />
+                      <span className="filter-price-sep">to</span>
+                      <input
+                        className="filter-price-input"
+                        type="number"
+                        min="0"
+                        placeholder="Max"
+                        value={priceMax}
+                        onChange={(e) => setPriceMax(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="filter-footer">
+                <button type="button" className="filter-clear-btn" onClick={handleClearAll}>
+                  Clear All
+                </button>
+                <button
+                  type="button"
+                  className="filter-apply-btn"
+                  onClick={() => {
+                    fetchSweets();
+                    setIsFilterOpen(false);
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
 
         {/* Add Sweet Button */}
         <div className="admin-actions">
@@ -338,10 +542,10 @@ function Dashboard() {
         {!loading && !error && sweets.length === 0 && (
           <div className="empty-container">
             <span className="empty-icon">🍭</span>
-            <p>{searchQuery ? `No sweets found for "${searchQuery}".` : 'No sweets available at the moment.'}</p>
-            {searchQuery && (
-              <button className="retry-btn" onClick={handleClearSearch}>
-                Clear Search
+            <p>{hasActiveFilters ? 'No sweets match your filters.' : 'No sweets available at the moment.'}</p>
+            {hasActiveFilters && (
+              <button className="retry-btn" onClick={handleClearAll}>
+                Clear Filters
               </button>
             )}
           </div>
@@ -351,7 +555,18 @@ function Dashboard() {
           <div className="sweets-grid">
             {sweets.map((sweet) => (
               <div key={sweet.id} className="sweet-card">
-                <div className="card-emoji">{getCategoryEmoji(sweet.category)}</div>
+                <div className="card-media">
+                  {sweet.image_url ? (
+                    <img
+                      className="sweet-image"
+                      src={sweet.image_url}
+                      alt={sweet.name}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="card-emoji">{getCategoryEmoji(sweet.category)}</span>
+                  )}
+                </div>
                 <div className="card-content">
                   <h3 className="card-title">{sweet.name}</h3>
                   <span className="card-category">{sweet.category}</span>
@@ -362,17 +577,49 @@ function Dashboard() {
                     </div>
                   </div>
                 </div>
-                <button
-                  className={`buy-btn ${sweet.quantity === 0 ? 'disabled' : ''}`}
-                  disabled={sweet.quantity === 0 || purchasingId === sweet.id}
-                  onClick={() => handlePurchase(sweet.id)}
-                >
-                  {purchasingId === sweet.id
-                    ? 'Purchasing...'
-                    : sweet.quantity === 0
-                    ? 'Out of Stock'
-                    : 'Buy Now'}
-                </button>
+                {!isAdmin && (
+                  <div className="qty-row">
+                    <div className="qty-stepper" aria-label="Select quantity">
+                      <button
+                        type="button"
+                        className="qty-btn"
+                        onClick={() => adjustQty(sweet, -1)}
+                        disabled={sweet.quantity <= 0 || purchasingId === sweet.id || getPurchaseQty(sweet) <= 1}
+                        aria-label="Decrease quantity"
+                      >
+                        −
+                      </button>
+                      <span className="qty-value" aria-label="Selected quantity">
+                        {getPurchaseQty(sweet)}
+                      </span>
+                      <button
+                        type="button"
+                        className="qty-btn"
+                        onClick={() => adjustQty(sweet, +1)}
+                        disabled={
+                          sweet.quantity <= 0 ||
+                          purchasingId === sweet.id ||
+                          getPurchaseQty(sweet) >= sweet.quantity
+                        }
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <button
+                      className={`buy-btn ${sweet.quantity === 0 ? 'disabled' : ''}`}
+                      disabled={sweet.quantity === 0 || purchasingId === sweet.id}
+                      onClick={() => handlePurchase(sweet, getPurchaseQty(sweet))}
+                    >
+                    {purchasingId === sweet.id
+                      ? 'Purchasing...'
+                      : sweet.quantity === 0
+                      ? 'Out of Stock'
+                      : 'Buy Now'}
+                    </button>
+                  </div>
+                )}
                 {isAdmin && (
                   <div className="admin-card-actions" style={{ marginTop: '10px', display: 'flex', gap: '5px' }}>
                     <button

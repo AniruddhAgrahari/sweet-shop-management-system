@@ -15,6 +15,7 @@ class Sweet(SQLModel, table=True):
     category: str
     price: float
     quantity: int
+    image_url: Optional[str] = Field(default=None)
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -26,3 +27,13 @@ class UserRegister(SQLModel):
     username: str
     password: str
     role: str = "customer"
+
+
+class AdminInit(SQLModel):
+    username: str
+    password: str
+
+
+class AdminPasswordReset(SQLModel):
+    username: str
+    new_password: str

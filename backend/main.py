@@ -1,12 +1,14 @@
 from contextlib import asynccontextmanager
 from typing import Any
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import or_
 from sqlmodel import Session, select
 from database import create_db_and_tables, get_session
-from models import Sweet, User, UserRegister
+from models import Sweet, User, UserRegister, AdminInit, AdminPasswordReset
 from security import get_password_hash, verify_password, create_access_token
+from security import SECRET_KEY
 from auth_dependencies import get_current_admin
 
 # Import FastAPI, Depends, SQLModel, Session, select, asynccontextmanager
@@ -26,11 +28,34 @@ app = FastAPI(lifespan=lifespan)
 # Add CORS middleware to allow the frontend to communicate with the backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Allow the React app
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ],  # Allow the React app (Vite may pick a different port if 5173 is busy)
     allow_credentials=True,
     allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allow all headers
 )
+
+
+def _default_image_url_for_category(category: str | None) -> str | None:
+    if not category:
+        return None
+
+    normalized = category.strip().lower().replace(" ", "_")
+    mapping: dict[str, str] = {
+        "indian": "/sweets/indian.svg",
+        "chocolate": "/sweets/chocolate.svg",
+        "candy": "/sweets/candy.svg",
+        "cake": "/sweets/cake.svg",
+        "cookie": "/sweets/cookie.svg",
+        "ice_cream": "/sweets/ice_cream.svg",
+        "ice-cream": "/sweets/ice_cream.svg",
+        "icecream": "/sweets/ice_cream.svg",
+    }
+    return mapping.get(normalized)
 
 @app.get("/")
 def read_root():
@@ -46,6 +71,8 @@ def create_sweet(
     session: Session = Depends(get_session),
     admin: Any = Depends(get_current_admin)
 ):
+    if not sweet.image_url:
+        sweet.image_url = _default_image_url_for_category(sweet.category)
     session.add(sweet)
     session.commit()
     session.refresh(sweet)
@@ -76,7 +103,11 @@ def search_sweets(
         statement = statement.where(Sweet.name.ilike(f"%{name}%"))
     
     if category:
-        statement = statement.where(Sweet.category.ilike(f"%{category}%"))
+        categories = [c.strip() for c in category.split(",") if c.strip()]
+        if len(categories) == 1:
+            statement = statement.where(Sweet.category.ilike(f"%{categories[0]}%"))
+        elif categories:
+            statement = statement.where(or_(*[Sweet.category.ilike(f"%{c}%") for c in categories]))
 
     if min_price is not None:
         statement = statement.where(Sweet.price >= min_price)
@@ -121,6 +152,9 @@ def update_sweet(
     sweet_data = sweet_update.model_dump(exclude_unset=True)
     for key, value in sweet_data.items():
         setattr(sweet, key, value)
+
+    if not sweet.image_url:
+        sweet.image_url = _default_image_url_for_category(sweet.category)
         
     session.add(sweet)
     session.commit()
@@ -146,19 +180,33 @@ def delete_sweet(
     return {"ok": True}
 
 @app.post("/sweets/{sweet_id}/purchase")
-def purchase_sweet(sweet_id: int, session: Session = Depends(get_session)):
+def purchase_sweet(
+    sweet_id: int,
+    quantity: int = 1,
+    session: Session = Depends(get_session),
+):
     sweet = session.get(Sweet, sweet_id)
     if not sweet:
         raise HTTPException(status_code=404, detail="Sweet not found")
-    
+
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be positive")
+
     if sweet.quantity <= 0:
         raise HTTPException(status_code=400, detail="Out of stock")
-    
-    sweet.quantity -= 1
+
+    if quantity > sweet.quantity:
+        raise HTTPException(status_code=400, detail="Not enough stock")
+
+    sweet.quantity -= quantity
     session.add(sweet)
     session.commit()
     session.refresh(sweet)
-    return {"message": "Purchase successful", "remaining_stock": sweet.quantity}
+    return {
+        "message": "Purchase successful",
+        "purchased_qty": quantity,
+        "remaining_stock": sweet.quantity,
+    }
 
 # Create a POST endpoint "/auth/register"
 # Takes user: User and session: Session
@@ -174,7 +222,58 @@ def register_user(user_data: UserRegister, session: Session = Depends(get_sessio
     
     # bcrypt only uses the first 72 bytes; truncate to avoid ValueError for longer inputs
     hashed_password = get_password_hash(user_data.password[:72])
-    user = User(username=user_data.username, password_hash=hashed_password, role=user_data.role)
+    # Public registration is always customer; admins are created separately.
+    user = User(username=user_data.username, password_hash=hashed_password, role="customer")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@app.post("/auth/init-admin", response_model=User)
+def init_admin(payload: AdminInit, session: Session = Depends(get_session)):
+    """Create the very first admin account.
+
+    Safety: this only works if there is currently no admin in the database.
+    After an admin exists, further admin creation should be done by an admin-only route.
+    """
+
+    existing_admin = session.exec(select(User).where(User.role == "admin")).first()
+    if existing_admin:
+        raise HTTPException(status_code=403, detail="An admin already exists")
+
+    existing_user = session.exec(select(User).where(User.username == payload.username)).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    hashed_password = get_password_hash(payload.password[:72])
+    user = User(username=payload.username, password_hash=hashed_password, role="admin")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@app.post("/auth/dev-reset-admin-password", response_model=User)
+def dev_reset_admin_password(
+    payload: AdminPasswordReset,
+    session: Session = Depends(get_session),
+    x_setup_key: str | None = Header(default=None, alias="X-Setup-Key"),
+):
+    """DEV-ONLY: reset an admin password.
+
+    This is intended for local development when you don't know the admin password.
+    It is protected by a setup key header that must match SECRET_KEY.
+    """
+
+    if not x_setup_key or x_setup_key != SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid setup key")
+
+    user = session.exec(select(User).where(User.username == payload.username)).first()
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=404, detail="Admin user not found")
+
+    user.password_hash = get_password_hash(payload.new_password[:72])
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -193,7 +292,8 @@ def login(
     if not verify_password(form_data.password, user.password_hash):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
 
-    token = create_access_token({"sub": user.username})
+    # Include role so frontend can detect admin vs customer.
+    token = create_access_token({"sub": user.username, "role": user.role})
     return {"access_token": token, "token_type": "bearer"}
 
 @app.post("/sweets/{sweet_id}/restock")
