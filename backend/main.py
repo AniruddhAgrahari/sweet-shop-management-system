@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from typing import Any
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
@@ -6,6 +7,7 @@ from sqlmodel import Session, select
 from database import create_db_and_tables, get_session
 from models import Sweet, User, UserRegister
 from security import get_password_hash, verify_password, create_access_token
+from auth_dependencies import get_current_admin
 
 # Import FastAPI, Depends, SQLModel, Session, select, asynccontextmanager
 # Import create_db_and_tables, get_session from database
@@ -122,7 +124,11 @@ def update_sweet(sweet_id: int, sweet_update: Sweet, session: Session = Depends(
 # Return {"ok": True}
 
 @app.delete("/sweets/{sweet_id}")
-def delete_sweet(sweet_id: int, session: Session = Depends(get_session)):
+def delete_sweet(
+    sweet_id: int, 
+    session: Session = Depends(get_session),
+    admin: Any = Depends(get_current_admin)
+):
     sweet = session.get(Sweet, sweet_id)
     if not sweet:
         raise HTTPException(status_code=404, detail="Sweet not found")
@@ -180,3 +186,25 @@ def login(
 
     token = create_access_token({"sub": user.username})
     return {"access_token": token, "token_type": "bearer"}
+
+@app.post("/sweets/{sweet_id}/restock")
+def restock_sweet(
+    sweet_id: int, 
+    quantity: int,
+    session: Session = Depends(get_session),
+    # THIS LINE PROTECTS THE ENDPOINT:
+    admin: Any = Depends(get_current_admin)
+):
+    sweet = session.get(Sweet, sweet_id)
+    if not sweet:
+        raise HTTPException(status_code=404, detail="Sweet not found")
+    
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be positive")
+
+    sweet.quantity += quantity
+    session.add(sweet)
+    session.commit()
+    session.refresh(sweet)
+    
+    return {"message": f"Restocked {quantity} units.", "new_stock": sweet.quantity}

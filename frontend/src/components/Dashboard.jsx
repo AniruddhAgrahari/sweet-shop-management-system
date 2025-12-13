@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../dashboard.css';
+import { getUserRole } from '../authUtils';
 
 const API_URL = 'http://127.0.0.1:8000';
 
 function Dashboard() {
+  const userRole = getUserRole();
+  const isAdmin = userRole === 'admin';
   const navigate = useNavigate();
   const [sweets, setSweets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +25,10 @@ function Dashboard() {
     quantity: '',
   });
 
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
   const getAuthHeaders = () => {
     const token = localStorage.getItem('access_token');
     return {
@@ -29,10 +36,17 @@ function Dashboard() {
     };
   };
 
-  const fetchSweets = async () => {
+  const fetchSweets = async (query = '') => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/sweets/`, {
+      let url = `${API_URL}/sweets/`;
+      
+      // Use search endpoint if there's a query
+      if (query.trim()) {
+        url = `${API_URL}/sweets/search?name=${encodeURIComponent(query.trim())}`;
+      }
+      
+      const response = await axios.get(url, {
         headers: getAuthHeaders(),
       });
       setSweets(response.data);
@@ -46,8 +60,18 @@ function Dashboard() {
   };
 
   useEffect(() => {
-    fetchSweets();
-  }, []);
+    fetchSweets(searchQuery);
+  }, [searchQuery]);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    setSearchQuery(searchInput);
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setSearchQuery('');
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -164,18 +188,58 @@ function Dashboard() {
           <p>Browse and purchase your favorite treats!</p>
         </div>
 
+        {/* Search Bar */}
+        <div className="search-container">
+          <form className="search-form" onSubmit={handleSearch}>
+            <div className="search-input-wrapper">
+              <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search sweets by name..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+              {searchInput && (
+                <button type="button" className="clear-search-btn" onClick={handleClearSearch}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              )}
+            </div>
+            <button type="submit" className="search-btn">
+              Search
+            </button>
+          </form>
+          {searchQuery && (
+            <p className="search-results-info">
+              Showing results for: <strong>"{searchQuery}"</strong>
+              <button className="clear-results-btn" onClick={handleClearSearch}>
+                Clear
+              </button>
+            </p>
+          )}
+        </div>
+
         {/* Add Sweet Button */}
         <div className="admin-actions">
-          <button
-            className={`add-sweet-btn ${showAddForm ? 'active' : ''}`}
-            onClick={() => setShowAddForm(!showAddForm)}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            {showAddForm ? 'Cancel' : 'Add New Sweet'}
-          </button>
+          {isAdmin && (
+            <button
+              className={`add-sweet-btn ${showAddForm ? 'active' : ''}`}
+              onClick={() => setShowAddForm(!showAddForm)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              {showAddForm ? 'Cancel' : 'Add New Sweet'}
+            </button>
+          )}
         </div>
 
         {/* Add Sweet Form */}
@@ -274,7 +338,12 @@ function Dashboard() {
         {!loading && !error && sweets.length === 0 && (
           <div className="empty-container">
             <span className="empty-icon">🍭</span>
-            <p>No sweets available at the moment.</p>
+            <p>{searchQuery ? `No sweets found for "${searchQuery}".` : 'No sweets available at the moment.'}</p>
+            {searchQuery && (
+              <button className="retry-btn" onClick={handleClearSearch}>
+                Clear Search
+              </button>
+            )}
           </div>
         )}
 
@@ -304,6 +373,21 @@ function Dashboard() {
                     ? 'Out of Stock'
                     : 'Buy Now'}
                 </button>
+                {isAdmin && (
+                  <button
+                    className="buy-btn"
+                    style={{ marginLeft: '10px', backgroundColor: '#2196F3' }}
+                    onClick={() => {
+                      const qty = prompt('Enter quantity to restock:', '10');
+                      if (qty) {
+                        // Placeholder for restock logic
+                        console.log(`Restocking sweet ${sweet.id} with ${qty}`);
+                      }
+                    }}
+                  >
+                    Restock
+                  </button>
+                )}
               </div>
             ))}
           </div>

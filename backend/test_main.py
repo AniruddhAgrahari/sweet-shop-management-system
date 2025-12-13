@@ -55,11 +55,19 @@ def test_delete_sweet(client):
     )
     sweet_id = create_res.json()["id"]
 
-    # 2. Delete it
-    delete_res = client.delete(f"/sweets/{sweet_id}")
+    # 2. Create Admin User & Login
+    client.post("/auth/register", json={"username": "admin_delete", "password": "adminpass", "role": "admin"})
+    login_res = client.post("/auth/login", data={"username": "admin_delete", "password": "adminpass"})
+    token = login_res.json()["access_token"]
+
+    # 3. Delete it (with token)
+    delete_res = client.delete(
+        f"/sweets/{sweet_id}",
+        headers={"Authorization": f"Bearer {token}"}
+    )
     assert delete_res.status_code == 200
 
-    # 3. Verify it's gone
+    # 4. Verify it's gone
     get_res = client.get(f"/sweets/{sweet_id}")
     assert get_res.status_code == 404
 
@@ -145,3 +153,35 @@ def test_search_sweets(client):
     assert response_category.status_code == 200
     assert len(response_category.json()) == 1
     assert response_category.json()[0]["name"] == "Gummy Bear"
+
+def test_restock_sweet_admin_only(client):
+    # 1. Register a regular user
+    client.post("/auth/register", json={"username": "customer", "password": "custpass", "role": "customer"})
+    
+    # 2. Login as regular user to get token
+    login_res = client.post("/auth/login", data={"username": "customer", "password": "custpass"})
+    customer_token = login_res.json()["access_token"]
+    
+    # 3. Create a sweet to restock
+    create_res = client.post("/sweets/", json={"name": "Low Stock", "category": "Test", "price": 1.0, "quantity": 1})
+    sweet_id = create_res.json()["id"]
+
+    # 4. Attempt Restock as CUSTOMER (Should Fail 403)
+    customer_restock = client.post(
+        f"/sweets/{sweet_id}/restock?quantity=10",
+        headers={"Authorization": f"Bearer {customer_token}"}
+    )
+    assert customer_restock.status_code == 403 # Forbidden!
+
+    # 5. Login as ADMIN
+    client.post("/auth/register", json={"username": "adminuser", "password": "adminpass", "role": "admin"})
+    admin_login = client.post("/auth/login", data={"username": "adminuser", "password": "adminpass"})
+    admin_token = admin_login.json()["access_token"]
+    
+    # 6. Attempt Restock as ADMIN (Should Succeed 200)
+    admin_restock = client.post(
+        f"/sweets/{sweet_id}/restock?quantity=10",
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    assert admin_restock.status_code == 200
+    assert admin_restock.json()["new_stock"] == 11
