@@ -11,6 +11,16 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [purchasingId, setPurchasingId] = useState(null);
+  
+  // Add Sweet Form State
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    category: '',
+    price: '',
+    quantity: '',
+  });
 
   const getAuthHeaders = () => {
     const token = localStorage.getItem('access_token');
@@ -73,6 +83,50 @@ function Dashboard() {
     }
   };
 
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleAddSweet = async (e) => {
+    e.preventDefault();
+    
+    // Validate form
+    if (!formData.name || !formData.category || !formData.price || !formData.quantity) {
+      alert('Please fill in all fields.');
+      return;
+    }
+
+    try {
+      setFormLoading(true);
+      const sweetData = {
+        name: formData.name,
+        category: formData.category,
+        price: parseFloat(formData.price),
+        quantity: parseInt(formData.quantity, 10),
+      };
+
+      await axios.post(`${API_URL}/sweets/`, sweetData, {
+        headers: getAuthHeaders(),
+      });
+
+      // Clear form and hide it
+      setFormData({ name: '', category: '', price: '', quantity: '' });
+      setShowAddForm(false);
+      
+      // Refresh the sweets list
+      await fetchSweets();
+    } catch (err) {
+      alert('Failed to add sweet. Please try again.');
+      console.error('Error adding sweet:', err);
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
   const getCategoryEmoji = (category) => {
     const emojiMap = {
       chocolate: '🍫',
@@ -109,6 +163,97 @@ function Dashboard() {
           <h2>Our Sweets Collection</h2>
           <p>Browse and purchase your favorite treats!</p>
         </div>
+
+        {/* Add Sweet Button */}
+        <div className="admin-actions">
+          <button
+            className={`add-sweet-btn ${showAddForm ? 'active' : ''}`}
+            onClick={() => setShowAddForm(!showAddForm)}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            {showAddForm ? 'Cancel' : 'Add New Sweet'}
+          </button>
+        </div>
+
+        {/* Add Sweet Form */}
+        {showAddForm && (
+          <div className="add-sweet-form-container">
+            <form className="add-sweet-form" onSubmit={handleAddSweet}>
+              <h3>Add New Sweet</h3>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="name">Name</label>
+                  <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleFormChange}
+                    placeholder="e.g., Chocolate Truffle"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="category">Category</label>
+                  <input
+                    type="text"
+                    id="category"
+                    name="category"
+                    value={formData.category}
+                    onChange={handleFormChange}
+                    placeholder="e.g., Chocolate"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="price">Price ($)</label>
+                  <input
+                    type="number"
+                    id="price"
+                    name="price"
+                    value={formData.price}
+                    onChange={handleFormChange}
+                    placeholder="e.g., 4.99"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="quantity">Quantity</label>
+                  <input
+                    type="number"
+                    id="quantity"
+                    name="quantity"
+                    value={formData.quantity}
+                    onChange={handleFormChange}
+                    placeholder="e.g., 50"
+                    min="0"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="cancel-btn"
+                  onClick={() => {
+                    setShowAddForm(false);
+                    setFormData({ name: '', category: '', price: '', quantity: '' });
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="submit-btn" disabled={formLoading}>
+                  {formLoading ? 'Adding...' : 'Add Sweet'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {loading && (
           <div className="loading-container">
