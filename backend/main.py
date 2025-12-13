@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 from database import create_db_and_tables, get_session
@@ -19,6 +20,15 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+
+# Add CORS middleware to allow the frontend to communicate with the backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Allow the React app
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
 
 @app.get("/")
 def read_root():
@@ -89,6 +99,21 @@ def delete_sweet(sweet_id: int, session: Session = Depends(get_session)):
     session.delete(sweet)
     session.commit()
     return {"ok": True}
+
+@app.post("/sweets/{sweet_id}/purchase")
+def purchase_sweet(sweet_id: int, session: Session = Depends(get_session)):
+    sweet = session.get(Sweet, sweet_id)
+    if not sweet:
+        raise HTTPException(status_code=404, detail="Sweet not found")
+    
+    if sweet.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Out of stock")
+    
+    sweet.quantity -= 1
+    session.add(sweet)
+    session.commit()
+    session.refresh(sweet)
+    return {"message": "Purchase successful", "remaining_stock": sweet.quantity}
 
 # Create a POST endpoint "/auth/register"
 # Takes user: User and session: Session
