@@ -53,6 +53,36 @@ def create_sweet(sweet: Sweet, session: Session = Depends(get_session)):
 def read_sweets(session: Session = Depends(get_session)):
     return session.exec(select(Sweet)).all()
 
+@app.get("/sweets/search")
+def search_sweets(
+    name: str = None,
+    category: str = None,
+    min_price: float = None,
+    max_price: float = None,
+    session: Session = Depends(get_session)
+):
+    # Start with a base select statement
+    statement = select(Sweet)
+
+    # Apply filters based on query parameters
+    if name:
+        # Use ilike for case-insensitive partial match
+        statement = statement.where(Sweet.name.ilike(f"%{name}%"))
+    
+    if category:
+        statement = statement.where(Sweet.category.ilike(f"%{category}%"))
+
+    if min_price is not None:
+        statement = statement.where(Sweet.price >= min_price)
+
+    if max_price is not None:
+        statement = statement.where(Sweet.price <= max_price)
+        
+    # Execute the query and fetch all results
+    sweets = session.exec(statement).all()
+    
+    return sweets
+
 # Create a GET endpoint "/sweets/{sweet_id}"
 # Takes sweet_id: int and session: Session
 # Uses session.get(Sweet, sweet_id) to find the sweet
