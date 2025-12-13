@@ -1,19 +1,28 @@
-from fastapi.testclient import TestClient
-# We are importing 'app' from main, but main.py doesn't exist yet!
-# This is intentional for TDD.
-from main import app 
+# Import client from conftest (actually pytest handles this automatically, just pass client as arg)
 
-client = TestClient(app)
+# Define test_create_sweet(client):
+#   Post to /sweets/ with name="Test", price=1.0, quantity=10, category="Test"
+#   Assert 200 OK and data["name"] == "Test"
 
-def test_read_root():
-    """
-    Test that the root endpoint returns a welcome message.
-    """
-    response = client.get("/")
+def test_create_sweet(client):
+    response = client.post(
+        "/sweets/",
+        json={"name": "Test", "price": 1.0, "quantity": 10, "category": "Test"}
+    )
     assert response.status_code == 200
-    assert response.json() == {"message": "Welcome to the Sweet Shop API"}
+    data = response.json()
+    assert data["name"] == "Test"
 
-# Test creating a new sweet
-# Send a POST request to "/sweets/" with json data: name="Wonka Bar", category="Chocolate", price=5.0, quantity=100
-# Assert status code is 200 or 201
-# Assert the returned json name is "Wonka Bar"
+# Define test_read_sweets(client):
+#   Post a sweet first
+#   Get /sweets/
+#   Assert 200 OK and len(response.json()) > 0
+
+def test_read_sweets(client):
+    client.post(
+        "/sweets/",
+        json={"name": "Test", "price": 1.0, "quantity": 10, "category": "Test"}
+    )
+    response = client.get("/sweets/")
+    assert response.status_code == 200
+    assert len(response.json()) > 0
