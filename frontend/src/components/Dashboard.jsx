@@ -374,19 +374,59 @@ function Dashboard() {
                     : 'Buy Now'}
                 </button>
                 {isAdmin && (
-                  <button
-                    className="buy-btn"
-                    style={{ marginLeft: '10px', backgroundColor: '#2196F3' }}
-                    onClick={() => {
-                      const qty = prompt('Enter quantity to restock:', '10');
-                      if (qty) {
-                        // Placeholder for restock logic
-                        console.log(`Restocking sweet ${sweet.id} with ${qty}`);
-                      }
-                    }}
-                  >
-                    Restock
-                  </button>
+                  <div className="admin-card-actions" style={{ marginTop: '10px', display: 'flex', gap: '5px' }}>
+                    <button
+                      className="buy-btn"
+                      style={{ backgroundColor: '#2196F3', flex: 1 }}
+                      onClick={async () => {
+                        const qtyStr = prompt('Enter quantity to restock:', '10');
+                        if (!qtyStr) return;
+                        const qty = parseInt(qtyStr, 10);
+                        if (isNaN(qty) || qty <= 0) {
+                          alert('Invalid quantity');
+                          return;
+                        }
+                        try {
+                          const response = await axios.post(
+                            `${API_URL}/sweets/${sweet.id}/restock?quantity=${qty}`,
+                            {},
+                            { headers: getAuthHeaders() }
+                          );
+                          // Update local state
+                          setSweets((prev) =>
+                            prev.map((s) =>
+                              s.id === sweet.id ? { ...s, quantity: response.data.new_stock } : s
+                            )
+                          );
+                          alert(`Restocked! New quantity: ${response.data.new_stock}`);
+                        } catch (err) {
+                          console.error(err);
+                          alert('Restock failed');
+                        }
+                      }}
+                    >
+                      Restock
+                    </button>
+                    <button
+                      className="buy-btn"
+                      style={{ backgroundColor: '#f44336', flex: 1 }}
+                      onClick={async () => {
+                        if (!window.confirm(`Are you sure you want to delete "${sweet.name}"?`)) return;
+                        try {
+                          await axios.delete(`${API_URL}/sweets/${sweet.id}`, {
+                            headers: getAuthHeaders(),
+                          });
+                          // Remove from local state
+                          setSweets((prev) => prev.filter((s) => s.id !== sweet.id));
+                        } catch (err) {
+                          console.error(err);
+                          alert('Delete failed');
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 )}
               </div>
             ))}

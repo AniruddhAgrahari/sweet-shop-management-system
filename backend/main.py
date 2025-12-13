@@ -41,7 +41,11 @@ def read_root():
 #   Adds sweet to session, commits, refreshes, returns sweet
 
 @app.post("/sweets/", response_model=Sweet, status_code=201)
-def create_sweet(sweet: Sweet, session: Session = Depends(get_session)):
+def create_sweet(
+    sweet: Sweet, 
+    session: Session = Depends(get_session),
+    admin: Any = Depends(get_current_admin)
+):
     session.add(sweet)
     session.commit()
     session.refresh(sweet)
@@ -104,7 +108,12 @@ def read_sweet(sweet_id: int, session: Session = Depends(get_session)):
 # Commit, refresh, and return the updated sweet
 
 @app.put("/sweets/{sweet_id}", response_model=Sweet)
-def update_sweet(sweet_id: int, sweet_update: Sweet, session: Session = Depends(get_session)):
+def update_sweet(
+    sweet_id: int, 
+    sweet_update: Sweet, 
+    session: Session = Depends(get_session),
+    admin: Any = Depends(get_current_admin)
+):
     sweet = session.get(Sweet, sweet_id)
     if not sweet:
         raise HTTPException(status_code=404, detail="Sweet not found")

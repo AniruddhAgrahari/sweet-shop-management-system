@@ -12,10 +12,7 @@ ALGORITHM = "HS256"
 # Import PassLib CryptContext
 # Create a pwd_context using "bcrypt", deprecated="auto"
 
-# NOTE: The installed `bcrypt` backend in this environment raises `ValueError` during
-# PassLib's bcrypt backend self-check (it hashes a >72-byte test secret).
-# Using `pbkdf2_sha256` avoids that backend issue while still providing secure hashing.
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Define a function get_password_hash(password) that returns the hashed password
 # Define a function verify_password(plain_password, hashed_password) that returns True if they match

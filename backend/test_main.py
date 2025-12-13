@@ -11,9 +11,16 @@ def test_read_root(client):
     assert response.json() == {"message": "Welcome to the Sweet Shop API"}
 
 def test_create_sweet(client):
+    # 1. Login as Admin
+    client.post("/auth/register", json={"username": "admin_create", "password": "adminpass", "role": "admin"})
+    login_res = client.post("/auth/login", data={"username": "admin_create", "password": "adminpass"})
+    token = login_res.json()["access_token"]
+
+    # 2. Create Sweet
     response = client.post(
         "/sweets/",
-        json={"name": "Wonka Bar", "category": "Chocolate", "price": 5.0, "quantity": 100}
+        json={"name": "Wonka Bar", "category": "Chocolate", "price": 5.0, "quantity": 100},
+        headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 201
     data = response.json()
@@ -21,10 +28,16 @@ def test_create_sweet(client):
     assert "id" in data
 
 def test_read_sweets(client):
-    # Create a sweet first
+    # 1. Login as Admin to create sweet
+    client.post("/auth/register", json={"username": "admin_read", "password": "adminpass", "role": "admin"})
+    login_res = client.post("/auth/login", data={"username": "admin_read", "password": "adminpass"})
+    token = login_res.json()["access_token"]
+
+    # 2. Create a sweet first
     client.post(
         "/sweets/",
-        json={"name": "Test Sweet", "category": "Test", "price": 1.0, "quantity": 10}
+        json={"name": "Test Sweet", "category": "Test", "price": 1.0, "quantity": 10},
+        headers={"Authorization": f"Bearer {token}"}
     )
     response = client.get("/sweets/")
     assert response.status_code == 200
@@ -32,33 +45,41 @@ def test_read_sweets(client):
     assert len(data) > 0
 
 def test_update_sweet(client):
-    # 1. Create sweet
+    # 1. Login as Admin
+    client.post("/auth/register", json={"username": "admin_update", "password": "adminpass", "role": "admin"})
+    login_res = client.post("/auth/login", data={"username": "admin_update", "password": "adminpass"})
+    token = login_res.json()["access_token"]
+
+    # 2. Create sweet
     create_res = client.post(
         "/sweets/",
-        json={"name": "Update Test", "price": 10.0, "quantity": 5, "category": "Test"}
+        json={"name": "Update Test", "price": 10.0, "quantity": 5, "category": "Test"},
+        headers={"Authorization": f"Bearer {token}"}
     )
     sweet_id = create_res.json()["id"]
 
-    # 2. Update it
+    # 3. Update it
     update_res = client.put(
         f"/sweets/{sweet_id}",
-        json={"name": "Update Test", "price": 50.0, "quantity": 5, "category": "Test"}
+        json={"name": "Update Test", "price": 50.0, "quantity": 5, "category": "Test"},
+        headers={"Authorization": f"Bearer {token}"}
     )
     assert update_res.status_code == 200
     assert update_res.json()["price"] == 50.0
 
 def test_delete_sweet(client):
-    # 1. Create sweet
-    create_res = client.post(
-        "/sweets/",
-        json={"name": "Delete Test", "price": 10.0, "quantity": 5, "category": "Test"}
-    )
-    sweet_id = create_res.json()["id"]
-
-    # 2. Create Admin User & Login
+    # 1. Create Admin User & Login
     client.post("/auth/register", json={"username": "admin_delete", "password": "adminpass", "role": "admin"})
     login_res = client.post("/auth/login", data={"username": "admin_delete", "password": "adminpass"})
     token = login_res.json()["access_token"]
+
+    # 2. Create sweet (using token)
+    create_res = client.post(
+        "/sweets/",
+        json={"name": "Delete Test", "price": 10.0, "quantity": 5, "category": "Test"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    sweet_id = create_res.json()["id"]
 
     # 3. Delete it (with token)
     delete_res = client.delete(
@@ -101,40 +122,58 @@ def test_login_user(client):
     assert data["token_type"] == "bearer"
 
 def test_purchase_sweet(client):
-    # 1. Create sweet
+    # 1. Login as Admin
+    client.post("/auth/register", json={"username": "admin_purchase", "password": "adminpass", "role": "admin"})
+    login_res = client.post("/auth/login", data={"username": "admin_purchase", "password": "adminpass"})
+    token = login_res.json()["access_token"]
+
+    # 2. Create sweet
     create_res = client.post(
         "/sweets/",
-        json={"name": "Purchase Test", "price": 2.0, "quantity": 5, "category": "Test"}
+        json={"name": "Purchase Test", "price": 2.0, "quantity": 5, "category": "Test"},
+        headers={"Authorization": f"Bearer {token}"}
     )
     sweet_id = create_res.json()["id"]
 
-    # 2. Purchase one
+    # 3. Purchase one
     purchase_res = client.post(f"/sweets/{sweet_id}/purchase")
     assert purchase_res.status_code == 200
     assert purchase_res.json()["remaining_stock"] == 4
 
-    # 3. Verify stock in DB
+    # 4. Verify stock in DB
     get_res = client.get(f"/sweets/{sweet_id}")
     assert get_res.json()["quantity"] == 4
 
 def test_purchase_out_of_stock(client):
-    # 1. Create sweet with 0 quantity
+    # 1. Login as Admin
+    client.post("/auth/register", json={"username": "admin_empty", "password": "adminpass", "role": "admin"})
+    login_res = client.post("/auth/login", data={"username": "admin_empty", "password": "adminpass"})
+    token = login_res.json()["access_token"]
+
+    # 2. Create sweet with 0 quantity
     create_res = client.post(
         "/sweets/",
-        json={"name": "Empty Test", "price": 2.0, "quantity": 0, "category": "Test"}
+        json={"name": "Empty Test", "price": 2.0, "quantity": 0, "category": "Test"},
+        headers={"Authorization": f"Bearer {token}"}
     )
     sweet_id = create_res.json()["id"]
 
-    # 2. Try to purchase
+    # 3. Try to purchase
     purchase_res = client.post(f"/sweets/{sweet_id}/purchase")
     assert purchase_res.status_code == 400
     assert purchase_res.json()["detail"] == "Out of stock"
 
 def test_search_sweets(client):
-    # 1. Create specific sweets for testing
-    client.post("/sweets/", json={"name": "Jelly Bean Mix", "category": "Jelly", "price": 2.50, "quantity": 50})
-    client.post("/sweets/", json={"name": "Gummy Bear", "category": "Gummy", "price": 4.00, "quantity": 50})
-    client.post("/sweets/", json={"name": "Chocolate Bar", "category": "Chocolate", "price": 8.00, "quantity": 50})
+    # 1. Login as Admin
+    client.post("/auth/register", json={"username": "admin_search", "password": "adminpass", "role": "admin"})
+    login_res = client.post("/auth/login", data={"username": "admin_search", "password": "adminpass"})
+    token = login_res.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Create specific sweets for testing
+    client.post("/sweets/", json={"name": "Jelly Bean Mix", "category": "Jelly", "price": 2.50, "quantity": 50}, headers=headers)
+    client.post("/sweets/", json={"name": "Gummy Bear", "category": "Gummy", "price": 4.00, "quantity": 50}, headers=headers)
+    client.post("/sweets/", json={"name": "Chocolate Bar", "category": "Chocolate", "price": 8.00, "quantity": 50}, headers=headers)
 
     # Test 1: Search by name (partial match)
     response_name = client.get("/sweets/search?name=jelly")
@@ -155,28 +194,32 @@ def test_search_sweets(client):
     assert response_category.json()[0]["name"] == "Gummy Bear"
 
 def test_restock_sweet_admin_only(client):
-    # 1. Register a regular user
-    client.post("/auth/register", json={"username": "customer", "password": "custpass", "role": "customer"})
-    
-    # 2. Login as regular user to get token
-    login_res = client.post("/auth/login", data={"username": "customer", "password": "custpass"})
-    customer_token = login_res.json()["access_token"]
-    
-    # 3. Create a sweet to restock
-    create_res = client.post("/sweets/", json={"name": "Low Stock", "category": "Test", "price": 1.0, "quantity": 1})
+    # 1. Create Admin User & Login (to create sweet)
+    client.post("/auth/register", json={"username": "admin_restock", "password": "adminpass", "role": "admin"})
+    admin_login = client.post("/auth/login", data={"username": "admin_restock", "password": "adminpass"})
+    admin_token = admin_login.json()["access_token"]
+
+    # 2. Create a sweet to restock
+    create_res = client.post(
+        "/sweets/", 
+        json={"name": "Low Stock", "category": "Test", "price": 1.0, "quantity": 1},
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
     sweet_id = create_res.json()["id"]
 
-    # 4. Attempt Restock as CUSTOMER (Should Fail 403)
+    # 3. Register a regular user
+    client.post("/auth/register", json={"username": "customer", "password": "custpass", "role": "customer"})
+    
+    # 4. Login as regular user to get token
+    login_res = client.post("/auth/login", data={"username": "customer", "password": "custpass"})
+    customer_token = login_res.json()["access_token"]
+
+    # 5. Attempt Restock as CUSTOMER (Should Fail 403)
     customer_restock = client.post(
         f"/sweets/{sweet_id}/restock?quantity=10",
         headers={"Authorization": f"Bearer {customer_token}"}
     )
     assert customer_restock.status_code == 403 # Forbidden!
-
-    # 5. Login as ADMIN
-    client.post("/auth/register", json={"username": "adminuser", "password": "adminpass", "role": "admin"})
-    admin_login = client.post("/auth/login", data={"username": "adminuser", "password": "adminpass"})
-    admin_token = admin_login.json()["access_token"]
     
     # 6. Attempt Restock as ADMIN (Should Succeed 200)
     admin_restock = client.post(
