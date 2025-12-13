@@ -62,3 +62,32 @@ def test_delete_sweet(client):
     # 3. Verify it's gone
     get_res = client.get(f"/sweets/{sweet_id}")
     assert get_res.status_code == 404
+
+def test_register_user(client):
+    response = client.post(
+        "/auth/register",
+        json={"username": "newuser", "password": "secret123"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["username"] == "newuser"
+    # Ensure the password saved in DB is NOT "secret123" (it should be hashed)
+    assert data["password_hash"] != "secret123"
+
+
+def test_login_user(client):
+    # 1. Register a user first
+    client.post(
+        "/auth/register",
+        json={"username": "loginuser", "password": "password123"}
+    )
+
+    # 2. Login with correct credentials (form data, not json!)
+    response = client.post(
+        "/auth/login",
+        data={"username": "loginuser", "password": "password123"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"

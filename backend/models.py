@@ -21,3 +21,8 @@ class User(SQLModel, table=True):
     username: str = Field(unique=True)
     password_hash: str
     role: str = Field(default="customer")
+
+class UserRegister(SQLModel):
+    username: str
+    password: str
+    role: str = "customer"

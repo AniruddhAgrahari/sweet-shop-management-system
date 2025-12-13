@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 from database import create_db_and_tables, get_session
-from models import Sweet
+from models import Sweet, User, UserRegister
+from security import get_password_hash, verify_password, create_access_token
 
 # Import FastAPI, Depends, SQLModel, Session, select, asynccontextmanager
 # Import create_db_and_tables, get_session from database
@@ -87,3 +89,39 @@ def delete_sweet(sweet_id: int, session: Session = Depends(get_session)):
     session.delete(sweet)
     session.commit()
     return {"ok": True}
+
+# Create a POST endpoint "/auth/register"
+# Takes user: User and session: Session
+# Check if a user with the same username already exists. If so, raise HTTPException 400.
+# Hash the user's password using get_password_hash
+# Add the user to the session, commit, refresh, and return the user
+
+@app.post("/auth/register", response_model=User)
+def register_user(user_data: UserRegister, session: Session = Depends(get_session)):
+    existing_user = session.exec(select(User).where(User.username == user_data.username)).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # bcrypt only uses the first 72 bytes; truncate to avoid ValueError for longer inputs
+    hashed_password = get_password_hash(user_data.password[:72])
+    user = User(username=user_data.username, password_hash=hashed_password, role=user_data.role)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+@app.post("/auth/login")
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: Session = Depends(get_session),
+):
+    user = session.exec(select(User).where(User.username == form_data.username)).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+    if not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+
+    token = create_access_token({"sub": user.username})
+    return {"access_token": token, "token_type": "bearer"}
