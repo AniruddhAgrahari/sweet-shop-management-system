@@ -24,7 +24,7 @@ function Login() {
       formData.append('password', password);
 
       const response = await axios.post(
-        'http://127.0.0.1:8000/auth/login',
+        'https://sweet-shop-management-system-production-df3f.up.railway.app/auth/login',
         formData,
         {
           headers: {
@@ -63,7 +63,7 @@ function Login() {
       };
 
       await axios.post(
-        'http://127.0.0.1:8000/auth/register',
+        'https://sweet-shop-management-system-production-df3f.up.railway.app/auth/register',
         payload,
         {
           headers: {
