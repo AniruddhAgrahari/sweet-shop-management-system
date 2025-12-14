@@ -48,11 +48,13 @@ def _default_image_url_for_category(category: str | None) -> str | None:
 
     normalized = category.strip().lower().replace(" ", "_")
     mapping: dict[str, str] = {
-        "indian": "/sweets/indian.svg",
-        "chocolate": "/sweets/chocolate.svg",
-        "candy": "/sweets/candy.svg",
-        "cake": "/sweets/cake.svg",
-        "cookie": "/sweets/cookie.svg",
+        # Defaults point to assets in `frontend/public/sweets/`
+        "indian": "/sweets/gulab_jamun.jpg",
+        "chocolate": "/sweets/dark_chocolate_bark.jpg",
+        "candy": "/sweets/gummy_bears.jpg",
+        "cake": "/sweets/red_velvet_cupcake.webp",
+        "cookie": "/sweets/chocochip_cookies.jpg",
+        "cookies": "/sweets/chocochip_cookies.jpg",
         "ice_cream": "/sweets/ice_cream.svg",
         "ice-cream": "/sweets/ice_cream.svg",
         "icecream": "/sweets/ice_cream.svg",
