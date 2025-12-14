@@ -1,12 +1,15 @@
+import os
 from datetime import datetime, timedelta
 
 from jose import jwt
 from passlib.context import CryptContext
+from dotenv import load_dotenv
 
-# Define a SECRET_KEY = "supersecretkey" (in real life, this comes from env vars)
-# Define ALGORITHM = "HS256"
+# Load environment variables from .env file
+load_dotenv()
 
-SECRET_KEY = "supersecretkey"
+# Get SECRET_KEY from environment variable (required for production)
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey-change-in-production")
 ALGORITHM = "HS256"
 
 # Import PassLib CryptContext
