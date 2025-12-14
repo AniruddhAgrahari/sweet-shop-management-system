@@ -223,11 +223,15 @@ def register_user(user_data: UserRegister, session: Session = Depends(get_sessio
     existing_user = session.exec(select(User).where(User.username == user_data.username)).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
+
+    existing_email = session.exec(select(User).where(User.email == user_data.email)).first()
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already exists")
     
     # bcrypt only uses the first 72 bytes; truncate to avoid ValueError for longer inputs
     hashed_password = get_password_hash(user_data.password[:72])
     # Public registration is always customer; admins are created separately.
-    user = User(username=user_data.username, password_hash=hashed_password, role="customer")
+    user = User(username=user_data.username, email=user_data.email, password_hash=hashed_password, role="customer")
     session.add(user)
     session.commit()
     session.refresh(user)

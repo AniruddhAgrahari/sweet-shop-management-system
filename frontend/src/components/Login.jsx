@@ -4,7 +4,9 @@ import axios from 'axios';
 
 function Login() {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,11 +55,17 @@ function Login() {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
     setLoading(true);
 
     try {
       const payload = {
         username: username,
+        email: email,
         password: password,
         role: "customer"
       };
@@ -76,6 +84,7 @@ function Login() {
       setIsRegistering(false);
       // Clear password field for security/convenience after registration
       setPassword('');
+      setConfirmPassword('');
     } catch (err) {
       if (err.response && err.response.data && err.response.data.detail) {
         setError(err.response.data.detail);
@@ -92,7 +101,9 @@ function Login() {
     setError('');
     setSuccessMessage('');
     setUsername('');
+    setEmail('');
     setPassword('');
+    setConfirmPassword('');
   };
 
   return (
@@ -120,6 +131,21 @@ function Login() {
             />
           </div>
 
+          {isRegistering && (
+            <div className="form-group">
+              <label htmlFor="email">Email</label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                required
+                autoComplete="email"
+              />
+            </div>
+          )}
+
           <div className="form-group">
             <label htmlFor="password">Password</label>
             <input
@@ -129,8 +155,24 @@ function Login() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter your password"
               required
+              autoComplete={isRegistering ? 'new-password' : 'current-password'}
             />
           </div>
+
+          {isRegistering && (
+            <div className="form-group">
+              <label htmlFor="confirmPassword">Confirm Password</label>
+              <input
+                type="password"
+                id="confirmPassword"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter your password"
+                required
+                autoComplete="new-password"
+              />
+            </div>
+          )}
 
           <button type="submit" className="login-button" disabled={loading}>
             {loading ? (isRegistering ? 'Registering...' : 'Logging in...') : (isRegistering ? 'Register' : 'Login')}

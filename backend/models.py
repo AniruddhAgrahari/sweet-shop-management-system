@@ -20,11 +20,13 @@ class Sweet(SQLModel, table=True):
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(unique=True)
+    email: Optional[str] = Field(default=None)
     password_hash: str
     role: str = Field(default="customer")
 
 class UserRegister(SQLModel):
     username: str
+    email: str
     password: str
     role: str = "customer"
 

@@ -56,6 +56,34 @@ def _ensure_sweets_image_url_column() -> None:
             connection.execute(text("ALTER TABLE sweet ADD COLUMN image_url VARCHAR"))
             connection.commit()
 
+
+def _ensure_users_email_column() -> None:
+    """Ensure the `user` table has an `email` column.
+
+    SQLModel won't auto-migrate existing tables when models change, so
+    we do a tiny, safe migration on startup.
+    """
+
+    with engine.connect() as connection:
+        if DATABASE_URL.startswith("sqlite"):
+            columns = connection.execute(text("PRAGMA table_info('user')")).fetchall()
+            column_names = {row[1] for row in columns}
+        else:
+            result = connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'user'"
+                )
+            ).fetchall()
+            column_names = {row[0] for row in result}
+
+        if "email" not in column_names:
+            # NOTE: We intentionally do not add a UNIQUE constraint here to avoid
+            # breaking existing data / requiring complex migrations.
+            connection.execute(text('ALTER TABLE "user" ADD COLUMN email VARCHAR'))
+            connection.commit()
+
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
     _ensure_sweets_image_url_column()
+    _ensure_users_email_column()
