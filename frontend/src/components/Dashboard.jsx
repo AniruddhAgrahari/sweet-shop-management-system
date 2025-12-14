@@ -571,7 +571,7 @@ function Dashboard() {
                   <h3 className="card-title">{sweet.name}</h3>
                   <span className="card-category">{sweet.category}</span>
                   <div className="card-details">
-                    <div className="card-price">${sweet.price.toFixed(2)}</div>
+                    <div className="card-price">₹{sweet.price.toFixed(2)}</div>
                     <div className={`card-stock ${sweet.quantity === 0 ? 'out-of-stock' : ''}`}>
                       {sweet.quantity > 0 ? `${sweet.quantity} in stock` : 'Out of stock'}
                     </div>
