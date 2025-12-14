@@ -33,7 +33,9 @@ app.add_middleware(
         "http://localhost:5174",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
-    ],  # Allow the React app (Vite may pick a different port if 5173 is busy)
+        "https://sweet-shop-managemen-ay.app",  # Vercel production frontend
+        "https://*.vercel.app",  # Allow all Vercel deployments
+    ],  # Allow local and production frontends
     allow_credentials=True,
     allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allow all headers
