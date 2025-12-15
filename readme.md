@@ -1,6 +1,6 @@
 # Sweet Shop Management System
 
-A full-stack Sweet Shop Management System where customers can browse and purchase sweets, and admins can manage inventory (add/restock/delete). The backend is built with **FastAPI + SQLModel (SQLite)** and the frontend is built with **React + Vite**.
+A full-stack Sweet Shop Management System where customers can browse and purchase sweets, and admins can manage inventory (add/restock/delete). The backend is built with **FastAPI + PostgreSQL** and the frontend is built with **React + Vite**.
 
 ## Project Explanation
 
@@ -27,7 +27,7 @@ This project provides:
 
 ## Tech Stack
 
-- Backend: FastAPI, SQLModel/SQLAlchemy, SQLite, Passlib + bcrypt, python-jose, Pytest
+- Backend: FastAPI, SQLModel/SQLAlchemy, PostgreSQL, Passlib + bcrypt, python-jose, Pytest
 - Frontend: React (Vite), React Router, Axios, CSS
 
 ## Local Setup & Run Instructions
